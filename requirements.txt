@@ -1,6 +1,5 @@
 pandas
 polars
-streamlit
 numpy
 streamlist_searchbox
 scipy
