@@ -2,7 +2,6 @@ pandas
 polars
 streamlit
 numpy
-pickle
 streamlist_searchbox
 scipy
 typing
