@@ -1,3 +1,6 @@
-
+matplotlib
 polars
-
+pandas
+numpy
+scipy
+typing
