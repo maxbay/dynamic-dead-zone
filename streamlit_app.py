@@ -92,23 +92,21 @@ def wasserstein_distance(mu1, cov1, mu2, cov2):
 # App Title and Description
 st.title("Expected vs Observed FF Shape")
 
-st.write("This app visualizes the shape of a pitcher's four-seam fastball (FF) relative to the expected shape tchergiven the pi's release position. You can select a pitcher and visualize the shape of their fastball for different years. A more unlikely shape is likely to be more surprising to the batter and more effective at limiting damage.")
+st.write("This app visualizes the shape of a pitcher's four-seam fastball (FF) relative to the expected shape given the picher's release position. You can select a pitcher and visualize the shape of their fastball for different years. A more unlikely shape is likely to be more surprising to the batter and more effective at limiting damage.")
 st.text('')
-st.write('I use release-direction-relative acceleration as the operant metric for shape because under a constant acceleration model, it is independent of time and I did not want time to plate as a source of variance. You can think of this as, basically, induced vertical break and horizontal break.')
+st.write('I use release-direction-relative acceleration as the operant metric for shape because it is independent of time under a constant acceleration model, and I did not want time to plate as a source of variance. You can think of the acceleration components as, basically, induced vertical break and horizontal break.')
 st.markdown('####')
-# Get player params
+# get player params
 dict_path = './data/params.pkl'
 with open(dict_path, 'rb') as f:
     player_params = pickle.load(f)
 
-# Get player df
+# get player df
 df_path = './data/considered_players.csv'
 considered_playeryears = pl.read_csv(df_path)
 
-# Player Selection with Autocomplete
+# player Selection with Autocomplete
 players = considered_playeryears['player_name'].unique().to_list()
-
-#selected_player = st.selectbox("Select a Player", players)
 
 selected_player = st_searchbox(search_players, label="Select a Pitcher",default='Cole, Gerrit')
 
@@ -143,7 +141,6 @@ if any([checkboxes[year] for year in years]):
     sig_expected = player_params[pitcher][latest_year]['sig_expected']
 
     #arm_angle = considered_playeryears.filter((pl.col('player_name') == pitcher_name) & (pl.col('game_year') == latest_year))['arm_angle'].to_numpy()[0]
-
     
     clabel_size = 7
 
