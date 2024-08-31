@@ -1,6 +1,3 @@
-pandas
+
 polars
-numpy
-streamlist_searchbox
-scipy
-matplotlib
+
