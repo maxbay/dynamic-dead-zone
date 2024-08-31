@@ -4,5 +4,4 @@ streamlit
 numpy
 streamlist_searchbox
 scipy
-typing
 matplotlib
