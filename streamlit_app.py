@@ -252,7 +252,7 @@ st.write(r'''
     $$
 
 
-   $\Sigma_{cross}$ is the cross covariance matrix between $\Sigma_{acc}$ and $\Sigma_{rel}$.
+   $\Sigma_{cross}$ is the cross covariance matrix between $\mathbf{x}_{acc}$ and $\mathbf{x}_{rel}$.
          
 
          
@@ -265,13 +265,13 @@ st.write(r'''
     where
 
     $$
-    \bar{\mu} = \mu_{rel} + \Sigma_{cross}\Sigma_{acc}^{-1}(a - \mu_{acc})
+    \bar{\mu} = \mu_{acc} + \Sigma_{cross}\Sigma_{rel}^{-1}(a - \mu_{rel})
     $$
 
     and covariance matrix
 
     $$
-    \bar{\Sigma} = \Sigma_{rel} - \Sigma_{cross}\Sigma_{acc}^{-1}\Sigma_{cross}^T
+    \bar{\Sigma} = \Sigma_{acc} - \Sigma_{cross}\Sigma_{rel}^{-1}\Sigma_{cross}^T
     $$
     '''
 
