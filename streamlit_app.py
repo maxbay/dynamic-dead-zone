@@ -233,8 +233,8 @@ st.write(r'''
     \end{bmatrix}
     \quad \text{with sizes} \quad
     \begin{bmatrix}
-    3 \times 1 \\
-    2 \times 1
+    2 \times 1 \\
+    3 \times 1
     \end{bmatrix}
     $$
 
@@ -246,8 +246,8 @@ st.write(r'''
     \end{bmatrix}
     \quad \text{with sizes} \quad
     \begin{bmatrix}
-    3 \times 3 & 3 \times 2 \\
-    2 \times 3 & 2 \times 2
+    2 \times 2 & 2 \times 3 \\
+    3 \times 2 & 3 \times 3
     \end{bmatrix}
     $$
 
