@@ -2,6 +2,7 @@ matplotlib
 polars
 pandas
 numpy
+joblib
 scipy
 typing
 streamlit-searchbox
