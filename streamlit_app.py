@@ -2,6 +2,7 @@ import streamlit as st
 import matplotlib.pyplot as plt
 import numpy as np
 import pickle
+import joblib
 import polars as pl
 from streamlit_searchbox import st_searchbox
 from scipy.stats import multivariate_normal
@@ -101,6 +102,13 @@ dict_path = './data/params.pkl'
 with open(dict_path, 'rb') as f:
     player_params = pickle.load(f)
 
+dict_path_si = './data/params_si.pkl'
+with open(dict_path_si, 'rb') as f:
+    player_params_si = pickle.load(f)
+
+model_knn = joblib.load('./data/p_ff_mdl.pkl')
+
+
 # get player df
 df_path = './data/considered_players.csv'
 considered_playeryears = pl.read_csv(df_path)
@@ -123,9 +131,10 @@ for i, year in enumerate(years):
 
 selected_years = [year for year in years if checkboxes[year]]
 
-f, ax = plt.subplots(1, 1, figsize=(10, 10))
 
 if any([checkboxes[year] for year in years]):
+
+    f, ax = plt.subplots(1, 1, figsize=(10, 10))
 
     latest_year = max(selected_years)
 
@@ -135,12 +144,16 @@ if any([checkboxes[year] for year in years]):
     pitcher_name = selected_player
     pitcher = considered_playeryears.filter(pl.col('player_name') == pitcher_name)['pitcher'].to_numpy()[0]
 
+    rel_vals = considered_playeryears.filter((pl.col('player_name') == pitcher_name) & (pl.col('game_year') == latest_year))[['release_pos_x_adj','release_extension_adj','release_pos_z_adj']].to_numpy()[0]
+
     # Parameters
     #expected
     mu_expected = player_params[pitcher][latest_year]['mu_expected']
     sig_expected = player_params[pitcher][latest_year]['sig_expected']
 
-    #arm_angle = considered_playeryears.filter((pl.col('player_name') == pitcher_name) & (pl.col('game_year') == latest_year))['arm_angle'].to_numpy()[0]
+    mu_expected_si = player_params_si[pitcher][latest_year]['mu_expected']
+    sig_expected_si = player_params_si[pitcher][latest_year]['sig_expected']
+
     
     clabel_size = 7
 
@@ -150,9 +163,16 @@ if any([checkboxes[year] for year in years]):
     X, Y = np.meshgrid(x, y)
     pos = np.dstack((X, Y))
 
+    p_ff = model_knn.predict_proba(rel_vals[None,:])[:,1]
+
     # Compute the bivariate normal distribution
-    rv = multivariate_normal(mu_expected, sig_expected)
-    Z = rv.pdf(pos)
+    rv_ff = multivariate_normal(mu_expected, sig_expected)
+    Z_ff = rv_ff.pdf(pos) * p_ff
+
+    rv_si = multivariate_normal(mu_expected_si, sig_expected_si)
+    Z_si = rv_si.pdf(pos) * (1 - p_ff)
+
+    Z = Z_ff + Z_si
 
     # Plot the spectral gradient without contour lines
     contour = ax.contourf(X, Y, Z, cmap='viridis', alpha=0.75, levels=5, antialiased=True)
@@ -200,16 +220,16 @@ if any([checkboxes[year] for year in years]):
 # Explanation with LaTeX
 
 st.write('\n\n\n')
-st.write("### Explainer... it's just a conditional MVN")
+st.write("### Explainer... it's just a mixture of conditional MVNs")
 
 st.write('')
 st.write(r'''
 
-    Population release position $(x,y,z)$ and pitch acceleration $(a_x,a_z)$ can be jointly modeled as 
-    a single $5-dimensional$ multivariate normal distribution $X$ fit from population sample where
-            
+
+    For any given pitch type, the pitcher-height-scaled pitch type population release position $(x',y',z') = \frac{(x,y,z)}{height}$ and pitch acceleration $(a_x,a_z)$ can be jointly modeled as a $5$-dimensional multivariate normal distribution $X_{\text{pitch type}}$ .
+
     $$
-    X \sim  \mathcal{N}(\mu, \Sigma)
+    X_{\text{pitch type}} \sim  \mathcal{N}(\mu, \Sigma)
     $$
             
     To learn conditional distribution of acceleration given a release position, $X$ is partitioned into release position and acceleration components 
@@ -273,6 +293,27 @@ st.write(r'''
     $$
     \bar{\Sigma} = \Sigma_{acc} - \Sigma_{cross}\Sigma_{rel}^{-1}\Sigma_{cross}^T
     $$
+         
+    The above is performed for both four-seam fastballs (FF) and sinkers (SI) independently to produce $X_{FF}$ and $X_{SI}$. Finally, the two distributions are mixed, giving $X$
+                  
+    $$
+    X = \pi_{\text{FF}} \mathcal{N}(\bar{\mu}_{\text{FF}}, \bar{\Sigma}_{\text{FF}}) + \pi_{\text{SI}} \mathcal{N}(\bar{\mu}_{\text{SI}}, \bar{\Sigma}_{\text{SI}})
+    $$
+
+    where $\pi_{FF}$ and $\pi_{SI}$ are component weights, equivalent to the probability of the pitch being a FF or SI respectively. The weights are calculated from a logistic regression fit
+    
+    $$
+    \pi_{FF} = p(\text{FF}) = \frac{1}{1 + \exp{-(\beta_0 + \beta_1 \cdot x' + \beta_2 \cdot y' + \beta_3 \cdot z' + \beta_4)}}
+    $$
+    and 
+         
+    $$
+    \pi_{SI} = 1 - \pi_{FF}
+    $$
+    
+
+ 
+         
     '''
 
 )
