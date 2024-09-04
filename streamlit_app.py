@@ -66,34 +66,6 @@ def search_players(searchterm: str) -> List[str]:
 import numpy as np
 from scipy.linalg import sqrtm
 
-def wasserstein_distance(mu1, cov1, mu2, cov2):
-    """
-    Compute the 2-Wasserstein distance between two multivariate normal distributions.
-    
-    Parameters:
-    mu1, mu2: Mean vectors of the two distributions (numpy arrays).
-    cov1, cov2: Covariance matrices of the two distributions (numpy arrays).
-    
-    Returns:
-    2-Wasserstein distance (float).
-    """
-    # Ensure inputs are numpy arrays
-    mu1, mu2 = np.array(mu1), np.array(mu2)
-    cov1, cov2 = np.array(cov1), np.array(cov2)
-    
-    # Compute the difference in means
-    mean_diff = np.linalg.norm(mu1 - mu2)**2
-    
-    # Compute the square root of the covariance matrix product
-    sqrt_cov_prod = sqrtm(np.dot(sqrtm(cov1), np.dot(cov2, sqrtm(cov1))))
-    
-    # Wasserstein distance formula for multivariate normal distributions
-    wasserstein_dist = np.sqrt(mean_diff + np.trace(cov1 + cov2 - 2 * sqrt_cov_prod))
-    
-    return wasserstein_dist
-
-
-# App Title and Description
 st.title("Expected vs Observed FF Shape")
 
 st.write("This app visualizes the shape of a pitcher's four-seam fastball (FF) relative to the expected shape given the picher's release position. You can select a pitcher and visualize the shape of their fastball for different years. A more unlikely shape is likely to be more surprising to the batter and more effective at limiting damage.")
@@ -123,7 +95,6 @@ selected_player = st_searchbox(search_players, label="Select a Pitcher",default=
 
 years = considered_playeryears.filter(pl.col('player_name') == selected_player)['game_year'].unique().to_list()
 
-# Data Selection Options
 st.write(f"Select the years you want to visualize:")
 
 cols = st.columns(len(years))
@@ -168,7 +139,7 @@ if any([checkboxes[year] for year in years]):
 
     p_ff = model_knn.predict_proba(rel_vals[None,:])[:,1]
 
-    # Compute the bivariate normal distribution
+    # compute the bivariate normal distribution
     rv_ff = multivariate_normal(mu_expected, sig_expected)
     Z_ff = rv_ff.pdf(pos) * p_ff
 
@@ -297,13 +268,13 @@ st.write(r'''
     \bar{\Sigma} = \Sigma_{acc} - \Sigma_{cross}\Sigma_{rel}^{-1}\Sigma_{cross}^T
     $$
          
-    The above is performed for both four-seam fastballs (FF) and sinkers (SI) independently to produce $X_{FF}$ and $X_{SI}$. Finally, the two distributions are mixed, giving $X$
+    The above is performed for both four-seam fastballs (FF) and sinkers (SI) independently to produce $X_{FF}$ and $X_{SI}$. Finally, the two distributions are mixed, giving the random variable $X$, where
                   
     $$
-    X = \pi_{\text{FF}} \mathcal{N}(\bar{\mu}_{\text{FF}}, \bar{\Sigma}_{\text{FF}}) + \pi_{\text{SI}} \mathcal{N}(\bar{\mu}_{\text{SI}}, \bar{\Sigma}_{\text{SI}})
+    X \sim \pi_{\text{FF}} \mathcal{N}(\bar{\mu}_{\text{FF}}, \bar{\Sigma}_{\text{FF}}) + \pi_{\text{SI}} \mathcal{N}(\bar{\mu}_{\text{SI}}, \bar{\Sigma}_{\text{SI}})
     $$
 
-    where $\pi_{FF}$ and $\pi_{SI}$ are component weights, equivalent to the probability of the pitch being a FF or SI respectively. The weights are calculated from a logistic regression fit
+    $\pi_{FF}$ and $\pi_{SI}$ are component weights, equivalent to the probability of the pitch being a FF or SI respectively. The weights are calculated from a logistic regression fit
     
     $$
     \pi_{FF} = p(\text{FF}) = \frac{1}{1 + \exp{-(\beta_0 + \beta_1 \cdot x' + \beta_2 \cdot y' + \beta_3 \cdot z' + \beta_4)}}
