@@ -105,20 +105,26 @@ for i, year in enumerate(years):
 
 selected_years = [year for year in years if checkboxes[year]]
 
+latest_year = max(selected_years)
+
+
+pitcher_name = selected_player
+pitcher = considered_playeryears.filter(pl.col('player_name') == pitcher_name)['pitcher'].to_numpy()[0]
+
+rel_vals = considered_playeryears.filter((pl.col('player_name') == pitcher_name) & (pl.col('game_year') == latest_year))[['release_pos_x_adj','release_extension_adj','release_pos_z_adj']].to_numpy()[0]
+
+model_p_ff = float(model_knn.predict_proba(rel_vals[None,:])[:,1][0])
+
+p_ff = st.slider(f"Select FF weight. Default {model_p_ff:.02}", min_value = 0.0, max_value = 1.0, value = model_p_ff,step = 0.05)
+
 
 if any([checkboxes[year] for year in years]):
 
     f, ax = plt.subplots(1, 1, figsize=(10, 10))
 
-    latest_year = max(selected_years)
-
+    
     colors = get_spectral_colors(5, pal = 'Set1')
     #######
-
-    pitcher_name = selected_player
-    pitcher = considered_playeryears.filter(pl.col('player_name') == pitcher_name)['pitcher'].to_numpy()[0]
-
-    rel_vals = considered_playeryears.filter((pl.col('player_name') == pitcher_name) & (pl.col('game_year') == latest_year))[['release_pos_x_adj','release_extension_adj','release_pos_z_adj']].to_numpy()[0]
 
     # Parameters
     #expected
@@ -137,7 +143,6 @@ if any([checkboxes[year] for year in years]):
     X, Y = np.meshgrid(x, y)
     pos = np.dstack((X, Y))
 
-    p_ff = model_knn.predict_proba(rel_vals[None,:])[:,1]
 
     # compute the bivariate normal distribution
     rv_ff = multivariate_normal(mu_expected, sig_expected)
