@@ -4,5 +4,6 @@ pandas
 numpy
 joblib
 scipy
+scikit-learn
 typing
 streamlit-searchbox
