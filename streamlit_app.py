@@ -6,7 +6,10 @@ import joblib
 import polars as pl
 from streamlit_searchbox import st_searchbox
 from scipy.stats import multivariate_normal
+from sklearn.neighbors import KNeighborsClassifier
 from typing import Any, List, Tuple
+
+
 
 
 from numpy import linalg as la
