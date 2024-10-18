@@ -1,228 +1,218 @@
 import streamlit as st
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
+from scipy.stats import multivariate_normal
+import matplotlib.colors as colors
 import pickle
 import joblib
 import polars as pl
-from streamlit_searchbox import st_searchbox
-from scipy.stats import multivariate_normal
-from sklearn.neighbors import KNeighborsClassifier
-from typing import Any, List, Tuple
-
-
-
-
 from numpy import linalg as la
 from matplotlib.patches import Ellipse
 
-def get_spectral_colors(n,pal='Spectral'):
-    cmap = plt.get_cmap(pal)
-    colors = [cmap(i / n) for i in range(n)]
-    return colors
+# Helper functions
+def reverse_name(name):
+    parts = name.split(', ')
+    if len(parts) == 1:
+        return name
+    last = parts[0]
+    first_and_suffix = parts[1].split()
+    if len(first_and_suffix) > 1 and first_and_suffix[-1] in ['Jr.', 'Sr.', 'II', 'III', 'IV']:
+        first = ' '.join(first_and_suffix[:-1])
+        suffix = first_and_suffix[-1]
+        return f"{first} {last} {suffix}"
+    else:
+        first = ' '.join(first_and_suffix)
+        return f"{first} {last}"
 
 def plot_confidence_ellipse(mu, cov, alph, ax, clabel=None, label_bg='white', clabel_size=10, **kwargs):
-    """Display a confidence ellipse of a bivariate normal distribution
-    
-    Arguments:
-        mu {array-like of shape (2,)} -- mean of the distribution
-        cov {array-like of shape(2,2)} -- covariance matrix
-        alph {float btw 0 and 1} -- level of confidence
-        ax {plt.Axes} -- axes on which to display the ellipse
-        clabel {str} -- label to add to ellipse (default: {None})
-        label_bg {str} -- background of clabel's textbox
-        clabel_size {int} -- font size of the clabel (default: {10})
-
-        kwargs -- other arguments given to class Ellipse
-    """
-    c = -2 * np.log(1 - alph)  # quantile at alpha of the chi_squarred distr. with df = 2
-    Lambda, Q = la.eig(cov)  # eigenvalues and eigenvectors (col. by col.)
-    
-    ## Compute the attributes of the ellipse
-    width, heigth = 2 * np.sqrt(c * Lambda)
-    # compute the value of the angle theta (in degree)
+    c = -2 * np.log(1 - alph)
+    Lambda, Q = la.eig(cov)
+    width, height = 2 * np.sqrt(c * Lambda)
     theta = 180 * np.arctan(Q[1,0] / Q[0,0]) / np.pi if cov[1,0] else 0
-        
-    ## Create the ellipse
     if 'fc' not in kwargs.keys():
         kwargs['fc'] = 'None'
-    level_line = Ellipse(mu, width, heigth, angle=theta, **kwargs)
-    
-    ## Display a label 'clabel' on the ellipse
+    level_line = Ellipse(mu, width, height, angle=theta, **kwargs)
     if clabel:
-        col = kwargs['ec'] if 'ec' in kwargs.keys() and kwargs['ec'] != 'None' else 'black'  # color of the text
-        pos = Q[:,1] * np.sqrt(c * Lambda[1]) + mu  # position along the heigth
-        
-        ax.text(*pos, clabel, color='black',
-           rotation=theta, ha='center', va='center', rotation_mode='anchor', # rotation
-           fontsize=clabel_size,  # set the font size
-           bbox=dict(boxstyle='round',ec='None',fc=label_bg, alpha=1)) # white box
-        
+        col = kwargs['ec'] if 'ec' in kwargs.keys() and kwargs['ec'] != 'None' else 'black'
+        pos = Q[:,1] * np.sqrt(c * Lambda[1]) + mu
+        ax.text(*pos, clabel, color=col, rotation=theta, ha='center', va='center', rotation_mode='anchor',
+                fontsize=clabel_size, bbox=dict(boxstyle='round',ec='None',fc=label_bg, alpha=1))
     return ax.add_patch(level_line)
 
+# Load data
+@st.cache_data
+def load_data():
+    considered_players = pl.read_csv('./data/considered_players.csv')
+    with open('./data/params.pkl', 'rb') as f:
+        player_params = pickle.load(f)
+    model_lr = joblib.load('./data/model_lr.pkl')
+    return considered_players, player_params, model_lr
 
-def search_players(searchterm: str) -> List[str]:
-    return [player for player in players if searchterm.lower() in player.lower()]
+considered_players, player_params, model_lr = load_data()
 
-import numpy as np
-from scipy.linalg import sqrtm
+# Streamlit app
+#st.sidebar.title("Page")
 
-st.title("Expected vs Observed FF Shape")
+page = st.sidebar.radio("Choose one of", ["DDZ Visualization", "Explainer"])
 
-st.write("This app visualizes the shape of a pitcher's four-seam fastball (FF) relative to the expected shape given the picher's release position. You can select a pitcher and visualize the shape of their fastball for different years. A more unlikely shape is likely to be more surprising to the batter and more effective at limiting damage.")
-st.text('')
-st.write('I use release-direction-relative acceleration as the operant metric for shape because it is independent of time under a constant acceleration model, and I did not want time to plate as a source of variance. You can think of the acceleration components as, basically, induced vertical break and horizontal break.')
-st.markdown('####')
-# get player params
-dict_path = './data/params.pkl'
-with open(dict_path, 'rb') as f:
-    player_params = pickle.load(f)
+if page == "DDZ Visualization":
 
-dict_path_si = './data/params_si.pkl'
-with open(dict_path_si, 'rb') as f:
-    player_params_si = pickle.load(f)
+    st.title("Dynamic Dead Zone Visualization")
+    st.write("This app visualizes the shape(s) of a pitcher's fastball(s) relative to the expected shape given the pitcher's release position. You can select a pitcher and visualize the shape of their fastball for different years. A more unlikely shape is likely to be more surprising to the batter and more effective at limiting damage.")
+    st.text('')
+    st.write('I use release-direction-relative acceleration as the operant metric for shape because it is independent of time under a constant acceleration model, and I did not want time to plate as a source of variance. You can think of the acceleration components as, basically, induced vertical break and horizontal break.')
+    st.markdown('####')
 
-model_knn = joblib.load('./data/p_ff_mdl.pkl')
+    pitcher_names = sorted(considered_players['player_name'].unique().to_numpy())
+    pitcher_name = st.selectbox("Select a player", pitcher_names)
+    years = sorted(considered_players.filter(pl.col('player_name') == pitcher_name)['game_year'].unique().to_numpy())
+    year = st.selectbox("Select a year", years)
 
+    if st.button("Generate Visualization"):
+        pitcher = considered_players.filter(pl.col('player_name') == pitcher_name)['pitcher'].to_numpy()[0]
+        
+        mu_expected_ff = player_params[pitcher][year]['FF']['mu_expected']
+        sig_expected_ff = player_params[pitcher][year]['FF']['sig_expected']
+        mu_expected_si = player_params[pitcher][year]['SI']['mu_expected']
+        sig_expected_si = player_params[pitcher][year]['SI']['sig_expected']
+        mu_expected_fc = player_params[pitcher][year]['FC']['mu_expected']
+        sig_expected_fc = player_params[pitcher][year]['FC']['sig_expected']
 
-# get player df
-df_path = './data/considered_players.csv'
-considered_playeryears = pl.read_csv(df_path)
+        arm_angle = considered_players.filter((pl.col('player_name') == pitcher_name) & (pl.col('game_year') == year))['arm_angle'].to_numpy()[0]
+        rel_vals = considered_players.filter((pl.col('player_name') == pitcher_name) & (pl.col('game_year') == year))[['arm_angle','extension_ratio']].to_numpy()[0]
+        pitcher_name = reverse_name(pitcher_name)
 
-# player Selection with Autocomplete
-players = considered_playeryears['player_name'].unique().to_list()
+        fig, ax = plt.subplots(figsize=(18, 12))
+        x = np.linspace(-15, 25, 100)
+        y = np.linspace(-5, 25, 100)
+        X, Y = np.meshgrid(x, y)
+        pos = np.dstack((X, Y))
 
-selected_player = st_searchbox(search_players, label="Select a Pitcher",default='Cole, Gerrit')
+        p_fc, p_si, p_ff = tuple(model_lr.predict_proba(rel_vals[None,:])[0])
 
-years = considered_playeryears.filter(pl.col('player_name') == selected_player)['game_year'].unique().to_list()
+        rv_ff = multivariate_normal(mu_expected_ff, sig_expected_ff)
+        Z_ff = rv_ff.pdf(pos) * p_ff
+        rv_si = multivariate_normal(mu_expected_si, sig_expected_si)
+        Z_si = rv_si.pdf(pos) * p_si
+        rv_fc = multivariate_normal(mu_expected_fc, sig_expected_fc)
+        Z_fc = rv_fc.pdf(pos) * p_fc
+        Z = Z_ff + Z_si + Z_fc
 
-st.write(f"Select the years you want to visualize:")
+        n_levels = 6
+        contour_color_lst = ['#000000','#1E3F5A', '#265D8C', '#3182BD', '#6BAED6', '#9ECAE1']
+        custom_cmap = colors.ListedColormap(contour_color_lst)
+        levels = np.linspace(Z.min(), Z.max(), n_levels + 1)
+        contours = ax.contourf(X, Y, Z, levels=levels, cmap=custom_cmap, extend='both')
 
-cols = st.columns(len(years))
+        example_mu = np.array([20,28])
+        example_sig = np.array([[1,0],[0,1]])*3
+        plot_confidence_ellipse(example_mu, example_sig, 0.65, ax, ec='white', label_bg=contour_color_lst[0], clabel='Pitch Type', clabel_size=10)
+        ax.text(*example_mu, 'Unexpected\nRide/Run', color='white', ha='center', va='center', fontsize=9)
 
-checkboxes = {}
-for i, year in enumerate(years):
-    checkboxes[year] = cols[i].checkbox(str(year), value=(year == max(years)))
+        pt_colors = ['#ff828b','#e7c582','#00b0ba']
+        counted_types = 0
+        for i, pitch_type in enumerate(['FF','SI','FC']):
+            if len(player_params[pitcher][year][pitch_type]) > 2:
+                counted_types += 1
+                mu_actual = player_params[pitcher][year][pitch_type]['mu_actual']
+                sig_actual = player_params[pitcher][year][pitch_type]['sig_actual']
+                plot_confidence_ellipse(mu_actual, sig_actual, .7, ax, ec=pt_colors[i], label_bg=contour_color_lst[0], clabel=pitch_type, clabel_size=14)
+                
+                if pitch_type == 'FF':
+                    ride_run_resid = np.round((mu_actual - mu_expected_ff),1)
+                elif pitch_type == 'SI':
+                    ride_run_resid = np.round((mu_actual - mu_expected_si),1)
+                elif pitch_type == 'FC':
+                    ride_run_resid = np.round((mu_actual - mu_expected_fc),1)
+                
+                ride_run_resid_text = f'{"+" if ride_run_resid[1] > 0 else "-"}{np.abs(ride_run_resid[1])}/{"+" if ride_run_resid[0] > 0 else "-"}{np.abs(ride_run_resid[0])}'
+                ax.text(mu_actual[0], mu_actual[1], ride_run_resid_text, color=pt_colors[i], ha='center', va='center', fontweight='bold', fontsize=10)
 
-selected_years = [year for year in years if checkboxes[year]]
+        ax.set_xlim(-10, 25)
+        ax.set_ylim(-5, 30)
+        ax.set_aspect('equal')
+        ax.axhline(0, color='white', linestyle='-')
+        ax.axvline(0, color='white', linestyle='-')
+        ax.grid(color='gray', linestyle='--', linewidth=0.5, alpha=0.5)
+        ax.set_xlabel("Horizontal acceleration (ft/s²),\nrelative to release direction", fontsize=10)
+        ax.set_ylabel("Vertical acceleration (ft/s²),\nrelative to release direction", fontsize=10)
+        plt.suptitle(f"{pitcher_name}'s fastball shape{'' if counted_types == 1 else 's'} relative\nto expected given arm angle and extension ({year})", 
+                    fontsize=18, fontweight='bold',color = 'white',y = 1)
 
-latest_year = max(selected_years)
+        cbar_ax = fig.add_axes([0.6, 0.9, 0.1, 0.02])
+        cbar = fig.colorbar(contours, cax=cbar_ax, orientation='horizontal')
+        cbar.set_ticks([])
+        cbar_ax.text(-.1, 0.5, "Most\nexpected", transform=cbar_ax.transAxes, fontsize=10, ha='right', va='center')
+        cbar_ax.text(1.1, 0.5, "Least\nexpected", transform=cbar_ax.transAxes, fontsize=10, ha='left', va='center')
+        cbar_ax.invert_xaxis()
+        cbar.outline.set_edgecolor('#dddddd')
+        cbar.outline.set_linewidth(2)
 
+        ax.set_facecolor('black')
+        fig.patch.set_facecolor('black')
 
-pitcher_name = selected_player
-pitcher = considered_playeryears.filter(pl.col('player_name') == pitcher_name)['pitcher'].to_numpy()[0]
+        for text in [ax.title, ax.xaxis.label, ax.yaxis.label] + ax.get_xticklabels() + ax.get_yticklabels():
+            text.set_color('white')
+            text.set_fontsize(text.get_fontsize() + 2)
 
-rel_vals = considered_playeryears.filter((pl.col('player_name') == pitcher_name) & (pl.col('game_year') == latest_year))[['release_pos_x_adj','release_extension_adj','release_pos_z_adj']].to_numpy()[0]
+        cbar_ax.yaxis.label.set_color('white')
+        for text in cbar_ax.texts:
+            text.set_color('white')
 
-model_p_ff = float(model_knn.predict_proba(rel_vals[None,:])[:,1][0])
+        arm_angle_from_midnight = 90 - arm_angle
+        arm_angle_rad = np.deg2rad(arm_angle_from_midnight)
+        line_length = 30
+        x_line = [0, line_length * np.cos(arm_angle_rad)]
+        y_line = [0, line_length * np.sin(arm_angle_rad)]
+        ax.plot(x_line, y_line, linestyle='--', color='#dddddd')
 
-p_ff = st.slider(f"Select FF weight. Default {model_p_ff:.02}", min_value = 0.0, max_value = 1.0, value = model_p_ff,step = 0.05)
+        mid_x = line_length * np.cos(arm_angle_rad) * .2
+        mid_y = line_length * np.sin(arm_angle_rad)  * .2
+        text_offset = 1
+        ax.text(mid_x, mid_y + text_offset, f'Arm Angle: {round(arm_angle,1)}°', color='#dddddd', fontsize=12, rotation=arm_angle_from_midnight, rotation_mode='anchor', ha='center', va='center')
 
+        ax.text(1.2, -.2, "Model by Max Bay\nData from baseballsavant.mlb.com", transform=ax.transAxes, fontsize=10, ha='right', va='bottom', color='white')
 
-if any([checkboxes[year] for year in years]):
+        plt.tight_layout(rect=[0, 0.05, 1, 0.95])
 
-    f, ax = plt.subplots(1, 1, figsize=(10, 10))
+        bar_ax = fig.add_axes([.31, 0.885, 0.07, 0.05])
+        pitch_types = ['FF', 'SI', 'FC']
+        probs = [p_ff, p_si, p_fc]
+        bar_ax.bar(pitch_types, probs, color=pt_colors)
 
-    
-    colors = get_spectral_colors(5, pal = 'Set1')
-    #######
+        bar_ax.set_facecolor('black')
+        bar_ax.tick_params(axis='x', colors='white')
+        bar_ax.tick_params(axis='y', colors='white')
+        bar_ax.set_ylim(0, 1)
+        for spine in bar_ax.spines.values():
+            spine.set_color('white')
 
-    # Parameters
-    #expected
-    mu_expected = player_params[pitcher][latest_year]['mu_expected']
-    sig_expected = player_params[pitcher][latest_year]['sig_expected']
+        bar_ax.set_title('Expected Pitch Type', color='white', fontsize=9)
 
-    mu_expected_si = player_params_si[pitcher][latest_year]['mu_expected']
-    sig_expected_si = player_params_si[pitcher][latest_year]['sig_expected']
+        st.pyplot(fig)
 
-    
-    clabel_size = 7
+elif page == "Explainer":
+    st.title("Explainer: A Mixture of Conditional Multivariate Normal Distributions")
 
-    # Define grid for contour plot
-    x = np.linspace(-5, 20, 100)
-    y = np.linspace(-5, 25, 100)
-    X, Y = np.meshgrid(x, y)
-    pos = np.dstack((X, Y))
-
-
-    # compute the bivariate normal distribution
-    rv_ff = multivariate_normal(mu_expected, sig_expected)
-    Z_ff = rv_ff.pdf(pos) * p_ff
-
-    rv_si = multivariate_normal(mu_expected_si, sig_expected_si)
-    Z_si = rv_si.pdf(pos) * (1 - p_ff)
-
-    Z = Z_ff + Z_si
-
-    # Plot the spectral gradient without contour lines
-    contour = ax.contourf(X, Y, Z, cmap='viridis', alpha=0.75, levels=5, antialiased=True)
-
-    for i, year in enumerate(selected_years):
-        #actual
-        mu_actual = player_params[pitcher][year]['mu_actual']
-        sig_actual = player_params[pitcher][year]['sig_actual']
-
-        # Plot the other elements
-        plot_confidence_ellipse(mu_actual, sig_actual, 0.5, ax, ec=colors[year - 2020], clabel=f'{year}', clabel_size=clabel_size)
-        ax.scatter(*mu_actual, c=colors[year - 2020])
-
-    ax.set_title(f"Pitch Shape Relative to Expected Given Arm Angle\n{pitcher_name} | FF", fontsize=18)
-
-
-    ax.set_xlim(-5, 20)
-
-    ax.set_ylim(-5, 25)
-    ax.set_xlabel("horizontal acceleration ($ft/s^2$) | relative to release direction", fontsize=13)
-    ax.set_ylabel("vertical acceleration ($ft/s^2$) | relative to release direction", fontsize=13)
-
-    #arm_angle_from_top = 90 - arm_angle
-
-    # Add arm angle as a grey dashed line
-    #arm_angle_rad = np.deg2rad(arm_angle_from_top)  # Convert to radians if necessary
-    #line_length = 30  # Length of the line
-    #x_line = [0, line_length * np.cos(arm_angle_rad)]
-    #y_line = [0, line_length * np.sin(arm_angle_rad)]
-    #ax.plot(x_line, y_line, linestyle='--', color='#444444')
-
-    # Add text just above the arm angle line
-    #mid_x = line_length * np.cos(arm_angle_rad) * .2
-    #mid_y = line_length * np.sin(arm_angle_rad)  * .2
-    #text_offset = 1  # Offset to place the text just above the line
-    #ax.text(mid_x, mid_y + text_offset, f'Arm Angle: {round(arm_angle,1)}°', color='#444444', fontsize=12, rotation=arm_angle_from_top, rotation_mode='anchor', ha='center', va='center')
-
-
-    ax.axhline(0, color='black', linestyle='--')
-    ax.axvline(0, color='black', linestyle='--')
-    ax.set_aspect('equal')
-    # Display the Plot
-    st.pyplot(f)
-
-# Explanation with LaTeX
-
-st.write('\n\n\n')
-st.write("### Explainer... it's just a mixture of conditional MVNs")
-
-st.write('')
-st.write(r'''
-
-
-    For any given pitch type, the pitcher-height-scaled pitch type population release position $(x',y',z') = \frac{(x,y,z)}{height}$ and pitch acceleration $(a_x,a_z)$ can be jointly modeled as a $5$-dimensional multivariate normal distribution $X_{\text{pitch type}}$ .
+    st.write(r'''
+    For any given pitch type, we model the release characteristics arm angle $a$, pitcher height-scaled extension $\hat{e} = \frac{e}{h}$, and pitch acceleration $(a_x,a_z)$ jointly as a 4-dimensional multivariate normal distribution.
+    Let $\mathbf{X}_{\text{pitch type}}$ represent this joint distribution:
 
     $$
-    X_{\text{pitch type}} \sim  \mathcal{N}(\mu, \Sigma)
+    \mathbf{X}_{\text{pitch type}} \sim \mathcal{N}(\mu, \Sigma)
     $$
-            
-    To learn conditional distribution of acceleration given a release position, $X$ is partitioned into release position and acceleration components 
+
+    We partition $\mathbf{X}$ into release characteristics and acceleration components:
 
     $$
-    \mathbf{x} =
+    \mathbf{X} =
     \begin{bmatrix}
-    \mathbf{x}_{acc} \\
-    \mathbf{x}_{rel}
+    \mathbf{X}_{acc} \\
+    \mathbf{X}_{rel}
     \end{bmatrix}
-
     $$
 
-    $\mu$ and $\Sigma$ are partitioned as follows
+    The mean $\mu$ and covariance matrix $\Sigma$ are partitioned accordingly:
 
     $$
     \mu =
@@ -233,7 +223,7 @@ st.write(r'''
     \quad \text{with sizes} \quad
     \begin{bmatrix}
     2 \times 1 \\
-    3 \times 1
+    2 \times 1
     \end{bmatrix}
     $$
 
@@ -245,55 +235,46 @@ st.write(r'''
     \end{bmatrix}
     \quad \text{with sizes} \quad
     \begin{bmatrix}
-    2 \times 2 & 2 \times 3 \\
-    3 \times 2 & 3 \times 3
+    2 \times 2 & 2 \times 2 \\
+    2 \times 2 & 2 \times 2
     \end{bmatrix}
     $$
 
+    Here, $\Sigma_{cross}$ is the cross-covariance matrix between $\mathbf{X}_{acc}$ and $\mathbf{X}_{rel}$.
 
-   $\Sigma_{cross}$ is the cross covariance matrix between $\mathbf{x}_{acc}$ and $\mathbf{x}_{rel}$.
-         
-
-         
-    $\mathbf{x}_{acc}$ conditional on observed release position $a$ is multivariate normal
-         
-    $$
-    \mathbf{x}_{acc} \mid \mathbf{x}_{rel} = a \sim \mathcal{N}(\bar{\mu}, \bar{\Sigma})
-    $$
-
-    where
+    Given observed release characteristics $\mathbf{r} = (a, e)$, the conditional distribution of acceleration $\mathbf{X}_{acc}$ is:
 
     $$
-    \bar{\mu} = \mu_{acc} + \Sigma_{cross}\Sigma_{rel}^{-1}(a - \mu_{rel})
+    \mathbf{X}_{acc} \mid \mathbf{X}_{rel} = \mathbf{r} \sim \mathcal{N}(\bar{\mu}, \bar{\Sigma})
     $$
 
-    and covariance matrix
+    where:
+
+    $$
+    \bar{\mu} = \mu_{acc} + \Sigma_{cross}\Sigma_{rel}^{-1}(\mathbf{r} - \mu_{rel})
+    $$
 
     $$
     \bar{\Sigma} = \Sigma_{acc} - \Sigma_{cross}\Sigma_{rel}^{-1}\Sigma_{cross}^T
     $$
-         
-    The above is performed for both four-seam fastballs (FF) and sinkers (SI) independently to produce $X_{FF}$ and $X_{SI}$. Finally, the two distributions are mixed, giving the random variable $X$, where
-                  
+
+    We perform this conditioning separately for four-seam fastballs (FF), sinkers (SI), and cutters (FC) to produce $\mathbf{X}_{FF}$, $\mathbf{X}_{SI}$, and $\mathbf{X}_{FC}$.
+
+    The final model is a mixture of these conditional distributions:
+
     $$
-    X \sim \pi_{\text{FF}} \mathcal{N}(\bar{\mu}_{\text{FF}}, \bar{\Sigma}_{\text{FF}}) + \pi_{\text{SI}} \mathcal{N}(\bar{\mu}_{\text{SI}}, \bar{\Sigma}_{\text{SI}})
+    \mathbf{X} \sim \pi_{FF} \mathcal{N}(\bar{\mu}_{FF}, \bar{\Sigma}_{FF}) + \pi_{SI} \mathcal{N}(\bar{\mu}_{SI}, \bar{\Sigma}_{SI}) + \pi_{FC} \mathcal{N}(\bar{\mu}_{FC}, \bar{\Sigma}_{FC})
     $$
 
-    $\pi_{FF}$ and $\pi_{SI}$ are component weights, equivalent to the probability of the pitch being a FF or SI respectively. The weights are calculated from a logistic regression fit
-    
-    $$
-    \pi_{FF} = p(\text{FF}) = \frac{1}{1 + \exp{-(\beta_0 + \beta_1 \cdot x' + \beta_2 \cdot y' + \beta_3 \cdot z' + \beta_4)}}
-    $$
-    and 
-         
-    $$
-    \pi_{SI} = 1 - \pi_{FF}
-    $$
-    
+    The mixing weights $\pi_{FF}$, $\pi_{SI}$, and $\pi_{FC}$ represent the probability of each pitch type given the release characteristics. We calculate these weights using multinomial logistic regression:
 
- 
-         
-    '''
+    $$
+    \pi_k = P(Z = k \mid \mathbf{r}) = \frac{e^{\mathbf{r}^T \beta_k}}{\sum_{j \in \{FF, SI, FC\}} e^{\mathbf{r}^T \beta_j}}
+    $$
 
-)
-
+    where:
+    - $Z$ is the categorical variable representing pitch type
+    - $k \in \{FF, SI, FC\}$
+    - $\mathbf{r} = (a, e)$ is the input vector of release characteristics (arm angle and scaled extension)
+    - $\beta_k$ are the learned coefficients for each pitch type
+    ''')
