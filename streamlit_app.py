@@ -193,30 +193,31 @@ st.markdown('---')
 st.markdown('<h2 style="font-size: 24px;">Explainer</h2>', unsafe_allow_html=True)
 with st.expander("Pull down to expand"):
     st.write(r'''
-    For any given pitch type, we model the release characteristics arm angle $a$, pitcher height-scaled extension $\hat{e} = \frac{e}{h}$, and pitch acceleration $(a_x,a_z)$ jointly as a 4-dimensional multivariate normal distribution.
-    Let $\mathbf{X}_{\text{pitch type}}$ represent this joint distribution:
+    For any given pitch type, we model the release characteristics—arm angle $d$ and pitcher height-scaled extension $\hat{e} = \frac{e}{h}$—along with pitch acceleration components $(a_x, a_z)$ jointly as a 4-dimensional multivariate normal distribution. Let $\mathbf{X}_{\text{pitch type}}$ represent this joint distribution:
 
     $$
     \mathbf{X}_{\text{pitch type}} \sim \mathcal{N}(\mu, \Sigma)
     $$
 
-    We partition $\mathbf{X}$ into release characteristics and acceleration components:
+    We partition $\mathbf{X}$ into acceleration and release characteristics components:
 
     $$
     \mathbf{X} =
     \begin{bmatrix}
-    \mathbf{X}_{acc} \\
-    \mathbf{X}_{rel}
+    \mathbf{X}_{\text{acc}} \\
+    \mathbf{X}_{\text{rel}}
     \end{bmatrix}
     $$
 
-    The mean $\mu$ and covariance matrix $\Sigma$ are partitioned accordingly:
+    where $\mathbf{X}_{\text{acc}} = \begin{bmatrix} a_x \\ a_z \end{bmatrix}$ and $\mathbf{X}_{\text{rel}} = \begin{bmatrix} d \\ \hat{e} \end{bmatrix}$.
+
+    The mean vector $\mu$ and covariance matrix $\Sigma$ are partitioned accordingly:
 
     $$
     \mu =
     \begin{bmatrix}
-    \mu_{acc} \\
-    \mu_{rel}
+    \mu_{\text{acc}} \\
+    \mu_{\text{rel}}
     \end{bmatrix}
     \quad \text{with sizes} \quad
     \begin{bmatrix}
@@ -228,8 +229,8 @@ with st.expander("Pull down to expand"):
     $$
     \Sigma =
     \begin{bmatrix}
-    \Sigma_{acc} & \Sigma_{cross} \\
-    \Sigma_{cross}^T & \Sigma_{rel}
+    \Sigma_{\text{acc}} & \Sigma_{\text{cross}} \\
+    \Sigma_{\text{cross}}^\top & \Sigma_{\text{rel}}
     \end{bmatrix}
     \quad \text{with sizes} \quad
     \begin{bmatrix}
@@ -238,41 +239,41 @@ with st.expander("Pull down to expand"):
     \end{bmatrix}
     $$
 
-    Here, $\Sigma_{cross}$ is the cross-covariance matrix between $\mathbf{X}_{acc}$ and $\mathbf{X}_{rel}$.
+    Here, $\Sigma_{\text{cross}}$ is the cross-covariance matrix between $\mathbf{X}_{\text{acc}}$ and $\mathbf{X}_{\text{rel}}$.
 
-    Given observed release characteristics $\mathbf{r} = (a, e)$, the conditional distribution of acceleration $\mathbf{X}_{acc}$ is:
+    Given observed release characteristics $\mathbf{r} = \begin{bmatrix} d \\ \hat{e} \end{bmatrix}$, the conditional distribution of acceleration $\mathbf{X}_{\text{acc}}$ is:
 
     $$
-    \mathbf{X}_{acc} \mid \mathbf{X}_{rel} = \mathbf{r} \sim \mathcal{N}(\bar{\mu}, \bar{\Sigma})
+    \mathbf{X}_{\text{acc}} \mid \mathbf{X}_{\text{rel}} = \mathbf{r} \sim \mathcal{N}(\bar{\mu}, \bar{\Sigma})
     $$
 
     where:
 
     $$
-    \bar{\mu} = \mu_{acc} + \Sigma_{cross}\Sigma_{rel}^{-1}(\mathbf{r} - \mu_{rel})
+    \bar{\mu} = \mu_{\text{acc}} + \Sigma_{\text{cross}} \Sigma_{\text{rel}}^{-1} (\mathbf{r} - \mu_{\text{rel}})
     $$
 
     $$
-    \bar{\Sigma} = \Sigma_{acc} - \Sigma_{cross}\Sigma_{rel}^{-1}\Sigma_{cross}^T
+    \bar{\Sigma} = \Sigma_{\text{acc}} - \Sigma_{\text{cross}} \Sigma_{\text{rel}}^{-1} \Sigma_{\text{cross}}^\top
     $$
 
-    We perform this conditioning separately for four-seam fastballs (FF), sinkers (SI), and cutters (FC) to produce $\mathbf{X}_{FF}$, $\mathbf{X}_{SI}$, and $\mathbf{X}_{FC}$.
+    We perform this conditioning separately for four-seam fastballs (FF), sinkers (SI), and cutters (FC) to obtain $\mathbf{X}_{\text{FF}}$, $\mathbf{X}_{\text{SI}}$, and $\mathbf{X}_{\text{FC}}$.
 
     The final model is a mixture of these conditional distributions:
 
     $$
-    \mathbf{X} \sim \pi_{FF} \mathcal{N}(\bar{\mu}_{FF}, \bar{\Sigma}_{FF}) + \pi_{SI} \mathcal{N}(\bar{\mu}_{SI}, \bar{\Sigma}_{SI}) + \pi_{FC} \mathcal{N}(\bar{\mu}_{FC}, \bar{\Sigma}_{FC})
+    P(\mathbf{X}_{\text{acc}} \mid \mathbf{r}) = \pi_{\text{FF}} \mathcal{N}(\bar{\mu}_{\text{FF}}, \bar{\Sigma}_{\text{FF}}) + \pi_{\text{SI}} \mathcal{N}(\bar{\mu}_{\text{SI}}, \bar{\Sigma}_{\text{SI}}) + \pi_{\text{FC}} \mathcal{N}(\bar{\mu}_{\text{FC}}, \bar{\Sigma}_{\text{FC}})
     $$
 
-    The mixing weights $\pi_{FF}$, $\pi_{SI}$, and $\pi_{FC}$ represent the probability of each pitch type given the release characteristics. We calculate these weights using multinomial logistic regression:
+    The mixing weights $\pi_{\text{FF}}$, $\pi_{\text{SI}}$, and $\pi_{\text{FC}}$ represent the probabilities of each pitch type given the release characteristics. We calculate these weights using multinomial logistic regression:
 
     $$
-    \pi_k = P(Z = k \mid \mathbf{r}) = \frac{e^{\mathbf{r}^T \beta_k}}{\sum_{j \in \{FF, SI, FC\}} e^{\mathbf{r}^T \beta_j}}
+    \pi_k = P(Z = k \mid \mathbf{r}) = \frac{e^{\mathbf{r}^\top \beta_k}}{\sum_{j \in \{\text{FF}, \text{SI}, \text{FC}\}} e^{\mathbf{r}^\top \beta_j}}
     $$
 
     where:
     - $Z$ is the categorical variable representing pitch type
-    - $k \in \{FF, SI, FC\}$
-    - $\mathbf{r} = (a, e)$ is the input vector of release characteristics (arm angle and scaled extension)
-    - $\beta_k$ are the learned coefficients for each pitch type
+    - $k \in \{\text{FF}, \text{SI}, \text{FC}\}$
+    - $\mathbf{r} = \begin{bmatrix} d \\ \hat{e} \end{bmatrix}$ is the input vector of release characteristics (arm angle and scaled extension)
+    - $\beta_k$ are the learned coefficient vectors for each pitch type
     ''')
