@@ -145,7 +145,7 @@ if st.button("Generate Visualization"):
 
     # Define grid for contour plot
     x = np.linspace(-15, 25, 100)
-    y = np.linspace(-5, 25, 100)
+    y = np.linspace(-10, 25, 100)
     X, Y = np.meshgrid(x, y)
     pos = np.dstack((X, Y))
 
