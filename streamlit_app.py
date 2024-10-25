@@ -9,6 +9,7 @@ import polars as pl
 from numpy import linalg as la
 from matplotlib.patches import Ellipse
 from matplotlib.ticker import FuncFormatter
+from PIL import Image
 
 
 # Helper functions
@@ -345,7 +346,18 @@ if st.button("Generate Visualization"):
     st.pyplot(fig)
 
 st.markdown('---')
-st.markdown('<h2 style="font-size: 24px;">Explainer</h2>', unsafe_allow_html=True)
+
+st.markdown('<h2 style="font-size: 24px;">Theory of the case</h2>', unsafe_allow_html=True)
+with st.expander("Pull down to expand"):
+
+    st.write('''
+    Empirically, break profiles are correlated with arm angle at release. This model assumes that batters have some level of awareness of this relationship, and that arm angle information primes batters to expect certain break profiles.
+    ''')    
+    st.image("./imgs/pitch_animation_slow.gif", caption='Arm angle vs. break')
+
+
+
+st.markdown('<h2 style="font-size: 24px;">Mathematical explainer</h2>', unsafe_allow_html=True)
 with st.expander("Pull down to expand"):
     st.write(r'''
     For any given pitch type, we model the release characteristics—arm angle $d$ and pitcher height-scaled extension $\hat{e} = \frac{e}{h}$—along with pitch acceleration components $(a_x, a_z)$ jointly as a 4-dimensional multivariate normal distribution. Let $\mathbf{X}_{\text{pitch type}}$ represent this joint distribution:
@@ -432,3 +444,4 @@ with st.expander("Pull down to expand"):
     - $\mathbf{r} = \begin{bmatrix} d \\ \hat{e} \end{bmatrix}$ is the input vector of release characteristics (arm angle and scaled extension)
     - $\beta_k$ are the learned coefficient vectors for each pitch type
     ''')
+
