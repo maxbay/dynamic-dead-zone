@@ -105,8 +105,21 @@ st.markdown('####')
 
 pitcher_names = sorted(considered_players['player_name'].unique().to_numpy())
 pitcher_name = st.selectbox("Select a player", pitcher_names)
-years = sorted(considered_players.filter(pl.col('player_name') == pitcher_name)['game_year'].unique().to_numpy())
-year = st.selectbox("Select a year", years)
+col1, col2 = st.columns(2)
+
+# In the first column, place the year selection
+with col1:
+    years = sorted(considered_players.filter(pl.col('player_name') == pitcher_name)['game_year'].unique().to_numpy())
+    year = st.selectbox("Select a year", years)
+
+# In the second column, place the radio button
+with col2:
+    genre = st.radio(
+        "Customize expected pitch type weight | Model expectation or concentrate all into selected pitch type",
+        ["Model", "FF", "SI", "FC"],
+        horizontal=True,
+        index=0,
+    )
 
 if st.button("Generate Visualization"):
 
@@ -150,7 +163,16 @@ if st.button("Generate Visualization"):
     pos = np.dstack((X, Y))
 
 
-    p_fc, p_si, p_ff = tuple(model_lr.predict_proba(rel_vals[None,:])[0]) #tuple(model_knn.predict_proba(rel_vals[None,:])[0])
+
+
+    if genre == "Model":
+        p_fc, p_si, p_ff = tuple(model_lr.predict_proba(rel_vals[None,:])[0])
+    elif genre == "FF":
+        p_fc, p_si, p_ff = 0, 0, 1
+    elif genre == "SI":
+        p_fc, p_si, p_ff = 0, 1, 0
+    elif genre == "FC":
+        p_fc, p_si, p_ff = 1, 0, 0
 
     # Compute the bivariate normal distribution
     rv_ff = multivariate_normal(mu_expected_ff, sig_expected_ff)
